@@ -1,0 +1,44 @@
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+# --- Tray icon ---
+$notify = New-Object System.Windows.Forms.NotifyIcon
+$notify.Icon = [System.Drawing.SystemIcons]::Application
+$notify.Visible = $true
+$notify.Text = "VV Auto-Launcher"
+
+# --- Context menu ---
+$menu = New-Object System.Windows.Forms.ContextMenuStrip
+$exitItem = New-Object System.Windows.Forms.ToolStripMenuItem "Exit"
+$exitItem.Add_Click({
+    $notify.Visible = $false
+    Get-EventSubscriber | Unregister-Event
+    [System.Windows.Forms.Application]::Exit()
+})
+$menu.Items.Add($exitItem)
+$notify.ContextMenuStrip = $menu
+
+# --- FileSystemWatcher as a background job ---
+Start-Job -ScriptBlock {
+    $downloadsPath = "$env:USERPROFILE\Downloads"
+    $watcher = New-Object System.IO.FileSystemWatcher
+    $watcher.Path = $downloadsPath
+    $watcher.Filter = "*.vv"
+    $watcher.IncludeSubdirectories = $false
+    $watcher.EnableRaisingEvents = $true
+
+    Register-ObjectEvent $watcher Created -Action {
+		$file = $Event.SourceEventArgs.FullPath
+		$proc = Start-Process "C:\Program Files\VirtViewer v11.0-256\bin\remote-viewer.exe" -ArgumentList $file -WindowStyle Hidden -PassThru 
+		Start-Sleep 1.5
+		Add-Type -AssemblyName Microsoft.VisualBasic
+		[Microsoft.VisualBasic.Interaction]::AppActivate($proc.Id)
+	}
+
+    # Keep the watcher alive in this job
+    while ($true) { Start-Sleep 3 }
+}
+
+
+# --- Keep alive ---
+[System.Windows.Forms.Application]::Run()
